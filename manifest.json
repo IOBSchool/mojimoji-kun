@@ -1,0 +1,9 @@
+{
+  "name": "文字起こしもじもじくん",
+  "short_name": "もじもじくん",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fde8de",
+  "theme_color": "#f6e9f3",
+  "icons": [{ "src": "icon.jpg", "sizes": "200x200", "type": "image/jpeg" }]
+}

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>文字起こしもじもじくん</title>
+<link rel="icon" href="icon.jpg">
+<link rel="apple-touch-icon" href="icon.jpg">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="もじもじくん">
+<meta name="theme-color" content="#f6e9f3">
+<style>
+  :root{
+    --bg1:#fde8de; --bg2:#ece3fb; --bg3:#ddf5ec;
+    --card:#ffffffd9; --ink:#3d3550; --sub:#7a7290;
+    --accent:#b07ce0; --accent2:#ff9db2; --ok:#3fb68b; --line:#e7dff2;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg1:#2a2238; --bg2:#1f2333; --bg3:#1d2b29;
+      --card:#2b2740e6; --ink:#f1ecff; --sub:#b7aecd; --line:#3d3654;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; color:var(--ink);
+    font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2) 55%,var(--bg3));
+    background-attachment:fixed;
+  }
+  .wrap{max-width:560px; margin:0 auto; padding:20px 16px 48px}
+  header{display:flex; align-items:center; gap:12px; margin-bottom:18px}
+  header img{width:60px; height:60px; border-radius:16px; box-shadow:0 4px 14px #b07ce040}
+  header h1{font-size:20px; margin:0; line-height:1.3}
+  header p{margin:2px 0 0; font-size:12px; color:var(--sub)}
+  .tabs{display:flex; gap:8px; margin-bottom:14px}
+  .tab{flex:1; padding:10px; border-radius:999px; border:1px solid var(--line);
+       background:var(--card); color:var(--ink); font-size:14px; font-weight:600}
+  .tab.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:22px;
+        padding:16px; backdrop-filter:blur(8px); margin-bottom:14px}
+  .mic{display:block; width:100%; padding:18px; border:0; border-radius:18px; font-size:18px;
+       font-weight:700; color:#fff; background:linear-gradient(135deg,var(--accent2),var(--accent));
+       box-shadow:0 6px 18px #b07ce055}
+  .mic.rec{background:linear-gradient(135deg,#ff6b8a,#e0457b); animation:pulse 1.4s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 10px #ff6b8a33}}
+  .status{font-size:13px; color:var(--sub); text-align:center; margin:10px 0 0; min-height:1.2em}
+  textarea,input{width:100%; border:1px solid var(--line); border-radius:14px; padding:12px;
+       font:inherit; font-size:16px; color:var(--ink); background:transparent}
+  textarea{min-height:220px; resize:vertical; line-height:1.7}
+  .interim{color:var(--sub); font-size:14px; min-height:1.4em; margin:8px 2px 0}
+  .row{display:flex; gap:8px; margin-top:10px}
+  .btn{flex:1; padding:13px 8px; border-radius:14px; border:1px solid var(--line);
+       background:var(--card); color:var(--ink); font:inherit; font-size:15px; font-weight:700}
+  .btn.main{background:var(--ink); color:var(--card); border-color:var(--ink)}
+  label{font-size:13px; color:var(--sub); display:block; margin:12px 0 6px}
+  .hidden{display:none}
+  .toast{position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:var(--ink);
+         color:var(--card); padding:10px 18px; border-radius:999px; font-size:14px; opacity:0;
+         transition:.25s; pointer-events:none}
+  .toast.show{opacity:1}
+  details summary{cursor:pointer; font-size:14px; color:var(--sub)}
+  .soon{text-align:center; color:var(--sub); font-size:14px; line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="icon.jpg" alt="">
+    <div>
+      <h1>文字起こしもじもじくん</h1>
+      <p>聞いた声を、そっと文字に。</p>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab on" data-tab="listen">🎙 その場で聞き取る</button>
+    <button class="tab" data-tab="link">🔗 リンクから起こす</button>
+  </div>
+
+  <section id="listen">
+    <div class="card">
+      <button id="mic" class="mic">🎙 聞き取りスタート</button>
+      <p id="status" class="status">ボタンを押すと、マイクで聞き取りを始めます</p>
+    </div>
+  </section>
+
+  <section id="link" class="hidden">
+    <div class="card soon">
+      🌱 ただいま準備中です<br>
+      FacebookやInstagramのリンクを貼るだけで<br>文字起こしできるようになります
+    </div>
+  </section>
+
+  <div class="card">
+    <textarea id="text" placeholder="ここに文字がどんどん出てきます（直接書き直してもOK）"></textarea>
+    <div id="interim" class="interim"></div>
+    <label for="memo">メモ（元リンクや気づきなど・任意）</label>
+    <input id="memo" placeholder="例：田中角栄の名言リール">
+    <div class="row">
+      <button id="copy" class="btn main">📋 コピー</button>
+      <button id="save" class="btn">💾 スプシに保存</button>
+      <button id="clear" class="btn">🧹 クリア</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>⚙️ 保存先の設定</summary>
+      <label for="gasUrl">保存先URL（GASのウェブアプリURL）</label>
+      <input id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      <label for="token">合言葉</label>
+      <input id="token" placeholder="GASに設定した合言葉">
+      <label><input type="checkbox" id="autoSave" style="width:auto"> 聞き取りを止めたら自動で保存する</label>
+      <div class="row"><button id="saveCfg" class="btn">設定を保存</button></div>
+    </details>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try{ return localStorage.getItem(k) || "" }catch(e){ return "" } },
+  set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
+};
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
+
+// タブ切り替え
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));
+  $("listen").classList.toggle("hidden", b.dataset.tab!=="listen");
+  $("link").classList.toggle("hidden", b.dataset.tab!=="link");
+});
+
+// 設定
+$("gasUrl").value = store.get("gasUrl");
+$("token").value = store.get("token");
+$("autoSave").checked = store.get("autoSave") === "1";
+$("saveCfg").onclick = ()=>{
+  store.set("gasUrl",$("gasUrl").value.trim());
+  store.set("token",$("token").value.trim());
+  store.set("autoSave",$("autoSave").checked?"1":"0");
+  toast("設定を保存しました");
+};
+
+// 聞き取り（Web Speech API）
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+if(!SR){
+  $("mic").disabled = true;
+  $("status").textContent = "このブラウザは聞き取りに対応していません。iPhoneはSafari、AndroidはChromeで開いてください";
+}
+function startRec(){
+  rec = new SR();
+  rec.lang = "ja-JP";
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.onresult = e=>{
+    let interim = "";
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r = e.results[i];
+      if(r.isFinal){
+        const ta=$("text");
+        ta.value += r[0].transcript.trim() + "\n";
+        ta.scrollTop = ta.scrollHeight;
+      } else interim += r[0].transcript;
+    }
+    $("interim").textContent = interim;
+  };
+  rec.onerror = e=>{
+    if(e.error==="not-allowed") { $("status").textContent="マイクが許可されていません。設定でマイクをオンにしてください"; stopRec(); }
+  };
+  // 無音で止まっても、聞き取り中なら自動で再開する
+  rec.onend = ()=>{ if(listening){ try{ rec.start() }catch(e){} } };
+  rec.start();
+}
+function stopRec(){
+  const was = listening;
+  listening = false;
+  if(rec) try{ rec.stop() }catch(e){}
+  $("interim").textContent = "";
+  $("mic").classList.remove("rec");
+  $("mic").textContent = "🎙 聞き取りスタート";
+  if($("status").textContent.startsWith("👂")) $("status").textContent = "止めました";
+  if(was && $("autoSave").checked && $("text").value.trim()) save();
+}
+$("mic").onclick = ()=>{
+  if(listening) return stopRec();
+  listening = true;
+  $("mic").classList.add("rec");
+  $("mic").textContent = "⏹ 聞き取りストップ";
+  $("status").textContent = "👂 聞き取り中…近くで音声を流してください";
+  startRec();
+};
+
+// コピー
+$("copy").onclick = async ()=>{
+  const v=$("text").value;
+  if(!v.trim()) return toast("まだ文字がありません");
+  try{ await navigator.clipboard.writeText(v); }
+  catch(e){ $("text").select(); document.execCommand("copy"); }
+  toast("コピーしました！");
+};
+
+// スプレッドシートに保存（GAS経由）
+async function save(){
+  const url = store.get("gasUrl"), token = store.get("token");
+  const text = $("text").value.trim();
+  if(!text) return toast("まだ文字がありません");
+  if(!url) return toast("⚙️保存先の設定をしてください");
+  const memo = $("memo").value.trim();
+  try{
+    await fetch(url,{method:"POST", mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({token, mode:"聞き取り", link: /^https?:\/\//.test(memo)?memo:"", text, memo})});
+    toast("スプシに保存しました 💾");
+  }catch(e){ toast("保存に失敗しました。電波を確認してください"); }
+}
+$("save").onclick = save;
+$("clear").onclick = ()=>{ if(confirm("文字を消しますか？")){ $("text").value=""; $("memo").value=""; } };
+</script>
+</body>
+</html>

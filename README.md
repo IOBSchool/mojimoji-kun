@@ -19,3 +19,13 @@
 
 - iPhoneはSafari、AndroidはChromeで開く
 - 同じスマホで別アプリ（インスタ等）に切り替えると聞き取りが止まるので、音声は別の端末で流す
+
+## リンクから起こす（裏方サーバー）
+
+`server/` がFacebook・Instagramのリンクから音声を取り出すサーバー。Renderの無料プランで動かす。
+
+1. https://dashboard.render.com/blueprints でGitHub連携し、このリポジトリを選ぶ（`render.yaml` を読み込む）
+2. デプロイ後、サービスの「Environment」に表示される `TOKEN` が合言葉
+3. もじもじくんの「⚙️保存先の設定」に、サーバーURLと合言葉を入れる
+
+無料プランは使わない時に眠るので、最初の1回は起きるまで1分ほどかかる。

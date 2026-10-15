@@ -186,6 +186,17 @@ function stopRec(){
   if($("status").textContent.startsWith("👂")) $("status").textContent = "止めました";
   if(was && $("autoSave").checked && $("text").value.trim()) save();
 }
+// スマホでは、画面が裏に回ると聞き取りが止まる（ブラウザの仕様）。戻ってきたら知らせて再開する
+let wentHidden = false;
+document.addEventListener("visibilitychange", ()=>{
+  if(!listening) return;
+  if(document.hidden){ wentHidden = true; return; }
+  if(wentHidden){
+    wentHidden = false;
+    $("status").textContent = "⚠️ 裏に回っている間は聞き取れません。もじもじくんを開いたまま、音声は別の端末で流してください";
+    try{ rec.start() }catch(e){}
+  }
+});
 $("mic").onclick = ()=>{
   if(listening) return stopRec();
   listening = true;

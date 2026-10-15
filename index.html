@@ -76,7 +76,8 @@
 
   <div class="tabs">
     <button class="tab on" data-tab="listen">🎙 その場で聞き取る</button>
-    <button class="tab" data-tab="link">🔗 リンクから起こす</button>
+    <button class="tab" data-tab="file">📁 ファイルから</button>
+    <button class="tab" data-tab="link">🔗 リンク</button>
   </div>
 
   <section id="listen">
@@ -86,10 +87,19 @@
     </div>
   </section>
 
+  <section id="file" class="hidden">
+    <div class="card">
+      <button id="pick" class="mic">📁 動画・音声を選ぶ</button>
+      <input id="fileIn" type="file" accept="video/*,audio/*" class="hidden">
+      <p id="fstatus" class="status">画面収録した動画やボイスメモを選ぶと、文字にします</p>
+    </div>
+  </section>
+
   <section id="link" class="hidden">
     <div class="card soon">
-      🌱 ただいま準備中です<br>
-      FacebookやInstagramのリンクを貼るだけで<br>文字起こしできるようになります
+      🌱 リンクを貼る機能は近日追加予定です<br>
+      今は「📁ファイルから」で、画面収録した動画を選んでね<br>
+      （コントロールセンターの画面収録でリールを録ると、音がきれいに入ります）
     </div>
   </section>
 
@@ -108,6 +118,8 @@
   <div class="card">
     <details>
       <summary>⚙️ 保存先の設定</summary>
+      <label for="gemKey">GeminiのAPIキー（ファイルから起こす用）</label>
+      <input id="gemKey" type="password" placeholder="AIza... で始まるキー">
       <label for="gasUrl">保存先URL（GASのウェブアプリURL）</label>
       <input id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
       <label for="token">合言葉</label>
@@ -130,17 +142,18 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("sho
 // タブ切り替え
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));
-  $("listen").classList.toggle("hidden", b.dataset.tab!=="listen");
-  $("link").classList.toggle("hidden", b.dataset.tab!=="link");
+  ["listen","file","link"].forEach(t=>$(t).classList.toggle("hidden", b.dataset.tab!==t));
 });
 
 // 設定
 $("gasUrl").value = store.get("gasUrl");
 $("token").value = store.get("token");
+$("gemKey").value = store.get("gemKey");
 $("autoSave").checked = store.get("autoSave") === "1";
 $("saveCfg").onclick = ()=>{
   store.set("gasUrl",$("gasUrl").value.trim());
   store.set("token",$("token").value.trim());
+  store.set("gemKey",$("gemKey").value.trim());
   store.set("autoSave",$("autoSave").checked?"1":"0");
   toast("設定を保存しました");
 };
@@ -215,6 +228,67 @@ $("copy").onclick = async ()=>{
   toast("コピーしました！");
 };
 
+// ファイルから起こす（Gemini）
+let lastMode = "聞き取り";
+$("mic").addEventListener("click", ()=>{ lastMode = "聞き取り"; });
+$("pick").onclick = ()=>$("fileIn").click();
+
+// 動画・音声から音だけ取り出し、16kHzモノラルのWAVに小さくする（送るデータを軽くするため）
+async function toWav(file){
+  const buf = await file.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  const audio = await new Promise((ok,ng)=>ctx.decodeAudioData(buf, ok, ng));
+  ctx.close && ctx.close();
+  const rate = 16000, len = Math.ceil(audio.duration*rate);
+  const off = new OfflineAudioContext(1, len, rate);
+  const src = off.createBufferSource(); src.buffer = audio; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + pcm.length*2));
+  const w = (o,str)=>{ for(let i=0;i<str.length;i++) out.setUint8(o+i,str.charCodeAt(i)) };
+  w(0,"RIFF"); out.setUint32(4,36+pcm.length*2,true); w(8,"WAVEfmt ");
+  out.setUint32(16,16,true); out.setUint16(20,1,true); out.setUint16(22,1,true);
+  out.setUint32(24,rate,true); out.setUint32(28,rate*2,true); out.setUint16(32,2,true); out.setUint16(34,16,true);
+  w(36,"data"); out.setUint32(40,pcm.length*2,true);
+  for(let i=0;i<pcm.length;i++){ const v=Math.max(-1,Math.min(1,pcm[i])); out.setInt16(44+i*2, v<0?v*0x8000:v*0x7fff, true); }
+  return { blob: new Blob([out],{type:"audio/wav"}), seconds: audio.duration };
+}
+function toBase64(blob){
+  return new Promise(ok=>{ const r=new FileReader(); r.onload=()=>ok(r.result.split(",")[1]); r.readAsDataURL(blob); });
+}
+$("fileIn").onchange = async ()=>{
+  const file = $("fileIn").files[0]; $("fileIn").value = "";
+  if(!file) return;
+  const key = store.get("gemKey");
+  if(!key) return toast("⚙️設定にGeminiのAPIキーを入れてください");
+  const st = $("fstatus"), btn = $("pick");
+  btn.disabled = true;
+  try{
+    st.textContent = "🎧 音を取り出しています…";
+    const { blob, seconds } = await toWav(file);
+    if(seconds > 600) throw new Error("10分までの動画にしてください");
+    st.textContent = "✍️ 文字にしています…（" + Math.round(seconds) + "秒の音声）";
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":key},
+      body:JSON.stringify({contents:[{parts:[
+        {text:"この音声を日本語でそのまま文字起こししてください。話している言葉だけを、句読点をつけて読みやすく出力してください。要約や説明は不要です。音楽だけで言葉がなければ「（言葉はありませんでした）」と出力してください。"},
+        {inline_data:{mime_type:"audio/wav", data: await toBase64(blob)}}
+      ]}]})
+    });
+    const json = await res.json();
+    if(!res.ok) throw new Error(json.error && json.error.message || ("エラー " + res.status));
+    const text = (json.candidates?.[0]?.content?.parts || []).map(p=>p.text||"").join("").trim();
+    const ta = $("text");
+    ta.value += (ta.value && !ta.value.endsWith("\n") ? "\n" : "") + text + "\n";
+    lastMode = "ファイル";
+    st.textContent = "✅ できました！下でコピー・保存できます";
+    if($("autoSave").checked && text) save();
+  }catch(e){
+    st.textContent = "😢 うまくいきませんでした：" + e.message;
+  }finally{ btn.disabled = false; }
+};
+
 // スプレッドシートに保存（GAS経由）
 async function save(){
   const url = store.get("gasUrl"), token = store.get("token");
@@ -225,7 +299,7 @@ async function save(){
   try{
     await fetch(url,{method:"POST", mode:"no-cors",
       headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({token, mode:"聞き取り", link: /^https?:\/\//.test(memo)?memo:"", text, memo})});
+      body:JSON.stringify({token, mode:lastMode, link: /^https?:\/\//.test(memo)?memo:"", text, memo})});
     toast("スプシに保存しました 💾");
   }catch(e){ toast("保存に失敗しました。電波を確認してください"); }
 }

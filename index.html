@@ -154,7 +154,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
 $("gasUrl").value = store.get("gasUrl");
 $("token").value = store.get("token");
 $("gemKey").value = store.get("gemKey");
-$("server").value = store.get("server");
+$("server").value = store.get("server") || "https://mojimoji-server.onrender.com";
 $("stoken").value = store.get("stoken");
 $("autoSave").checked = store.get("autoSave") === "1";
 $("saveCfg").onclick = ()=>{
@@ -316,7 +316,7 @@ $("fileIn").addEventListener("change", async ()=>{
 
 $("go").onclick = async ()=>{
   const url = $("url").value.trim(), st = $("lstatus");
-  const server = store.get("server").replace(/\/+$/,""), stoken = store.get("stoken");
+  const server = (store.get("server") || "https://mojimoji-server.onrender.com").replace(/\/+$/,""), stoken = store.get("stoken");
   if(!/^https?:\/\//.test(url)) return st.textContent = "リンクを貼ってください";
   if(!server) return st.textContent = "⚙️設定に「リンク用サーバーURL」を入れてください";
   $("go").disabled = true;
